@@ -74,7 +74,6 @@ public class GeneratorSettings {
 	public string CsFile;
 	public string ConnectionString;
 	public string Namespace = "";
-	public string RepoName = "";
 	public string ClassPrefix = "";
 	public string ClassSuffix = "";
 	public string SchemaName = null;
