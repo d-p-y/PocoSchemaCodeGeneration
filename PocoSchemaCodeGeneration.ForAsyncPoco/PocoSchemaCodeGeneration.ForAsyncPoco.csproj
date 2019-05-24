@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;net462</TargetFrameworks>
+    <Version>1.0.0.0</Version>
+    <Company>Dominik Pytlewski</Company>
+    <Copyright>Copyright © Dominik Pytlewski 2019</Copyright>
+    <Title>PocoSchemaCodeGeneration.ForAsyncPoco</Title>
+    <PackageLicenseUrl>https://github.com/d-p-y/PocoSchemaCodeGeneration/blob/master/LICENSE</PackageLicenseUrl>
+    <PackageProjectUrl>https://github.com/d-p-y/PocoSchemaCodeGeneration</PackageProjectUrl>
+    <Description>T4 templates from AsyncPoco changed to regular library to be usable by dotnet-script</Description>
+    <PackageTags>Poco classes generator</PackageTags>
+    <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
+  </PropertyGroup>
+</Project>

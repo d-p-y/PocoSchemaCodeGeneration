@@ -1,23 +1,12 @@
-<#@ template language="C#v3.5" hostspecific="True" #>
-<#@ assembly name="EnvDTE" #>
-<#@ assembly name="System.Core.dll" #>
-<#@ assembly name="System.Data" #>
-<#@ assembly name="System.Xml" #>
-<#@ assembly name="System.Configuration" #>
-<#@ assembly name="System.Windows.Forms" #>
-<#@ import namespace="System.Collections.Generic" #>
-<#@ import namespace="System.Data" #>
-<#@ import namespace="System.Data.SqlClient" #>
-<#@ import namespace="System.Data.Common" #>
-<#@ import namespace="System.Diagnostics" #>
-<#@ import namespace="System.Globalization" #>
-<#@ import namespace="System.IO" #>
-<#@ import namespace="System.Linq" #>
-<#@ import namespace="System.Text" #>
-<#@ import namespace="System.Text.RegularExpressions" #>
-<#@ import namespace="System.Configuration" #>
-<#@ import namespace="System.Windows.Forms" #>
-<#+
+using System;
+using System.Data;
+using System.Collections.Generic;
+using System.Data.Common;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Text.RegularExpressions;
 
 /*
  This code is part of the PetaPoco project (http://www.toptensoftware.com/petapoco).
@@ -79,18 +68,19 @@
  rights and limitations under the License.
 */
 
-string ConnectionStringName = "";
-string Namespace = "";
-string RepoName = "";
-string ClassPrefix = "";
-string ClassSuffix = "";
-string SchemaName = null;
-bool IncludeViews = false;
-bool GenerateOperations = false;
-bool GenerateCommon = true;
-bool GeneratePocos = true;
-bool TrackModifiedColumns = false;
-
+public class GeneratorSettings {
+	public DbProviderFactory DbProvider;
+	public Dialect SqlDialect;
+	public string CsFile;
+	public string ConnectionString;
+	public string Namespace = "";
+	public string RepoName = "";
+	public string ClassPrefix = "";
+	public string ClassSuffix = "";
+	public string SchemaName = null;
+	public bool IncludeViews = true;
+	public bool TrackModifiedColumns = false;
+}
 
 public class Table
 {
@@ -135,6 +125,13 @@ public class Column
     public bool IsNullable;
 	public bool IsAutoIncrement;
 	public bool Ignore;
+
+	public bool DomainIsNullable =>
+		IsNullable && 
+		PropertyType !="byte[]" && 
+		PropertyType !="string" &&
+		PropertyType !="Microsoft.SqlServer.Types.SqlGeography" &&
+		PropertyType !="Microsoft.SqlServer.Types.SqlGeometry";
 }
 
 public class Tables : List<Table>
@@ -158,312 +155,112 @@ public class Tables : List<Table>
 
 }
 
-
-static Regex rxCleanUp = new Regex(@"[^\w\d_]", RegexOptions.Compiled);
-
-static string[] cs_keywords = { "abstract", "event", "new", "struct", "as", "explicit", "null", 
-	 "switch", "base", "extern", "object", "this", "bool", "false", "operator", "throw", 
-	 "break", "finally", "out", "true", "byte", "fixed", "override", "try", "case", "float", 
-	 "params", "typeof", "catch", "for", "private", "uint", "char", "foreach", "protected", 
-	 "ulong", "checked", "goto", "public", "unchecked", "class", "if", "readonly", "unsafe", 
-	 "const", "implicit", "ref", "ushort", "continue", "in", "return", "using", "decimal", 
-	 "int", "sbyte", "virtual", "default", "interface", "sealed", "volatile", "delegate", 
-	 "internal", "short", "void", "do", "is", "sizeof", "while", "double", "lock", 
-	 "stackalloc", "else", "long", "static", "enum", "namespace", "string" };
-
-static Func<string, string> CleanUp = (str) =>
-{
-	str = rxCleanUp.Replace(str, "_");
-
-	if (char.IsDigit(str[0]) || cs_keywords.Contains(str))
-		str = "@" + str;
-	
-    return str;
-};
-
-string CheckNullable(Column col)
-{
-    string result="";
-    if(col.IsNullable && 
-		col.PropertyType !="byte[]" && 
-		col.PropertyType !="string" &&
-		col.PropertyType !="Microsoft.SqlServer.Types.SqlGeography" &&
-		col.PropertyType !="Microsoft.SqlServer.Types.SqlGeometry"
-		)
-        result="?";
-    return result;
-}
-
-string GetConnectionString(ref string connectionStringName, out string providerName)
-{
-    var _CurrentProject = GetCurrentProject();
-
-	providerName=null;
-    
-    string result="";
-    ExeConfigurationFileMap configFile = new ExeConfigurationFileMap();
-    configFile.ExeConfigFilename = GetConfigPath();
-
-    if (string.IsNullOrEmpty(configFile.ExeConfigFilename))
-        throw new ArgumentNullException("The project does not contain App.config or Web.config file.");
-    
-    
-    var config = System.Configuration.ConfigurationManager.OpenMappedExeConfiguration(configFile, ConfigurationUserLevel.None);
-    var connSection=config.ConnectionStrings;
-
-    //if the connectionString is empty - which is the defauls
-    //look for count-1 - this is the last connection string
-    //and takes into account AppServices and LocalSqlServer
-    if(string.IsNullOrEmpty(connectionStringName))
-    {
-        if(connSection.ConnectionStrings.Count>1)
-        {
-			connectionStringName = connSection.ConnectionStrings[connSection.ConnectionStrings.Count-1].Name;
-            result=connSection.ConnectionStrings[connSection.ConnectionStrings.Count-1].ConnectionString;
-            providerName=connSection.ConnectionStrings[connSection.ConnectionStrings.Count-1].ProviderName;
-        }            
-    }
-    else
-    {
-        try
-        {
-            result=connSection.ConnectionStrings[connectionStringName].ConnectionString;
-            providerName=connSection.ConnectionStrings[connectionStringName].ProviderName;
-        }
-        catch
-        {
-            result="There is no connection string name called '"+connectionStringName+"'";
-        }
-    }
-
-//	if (String.IsNullOrEmpty(providerName))
-//		providerName="System.Data.SqlClient";
-    
-    return result;
-}
-
-string _connectionString="";
-string _providerName="";
-
-void InitConnectionString()
-{
-    if(String.IsNullOrEmpty(_connectionString))
-    {
-        _connectionString=GetConnectionString(ref ConnectionStringName, out _providerName);
-
-		if(_connectionString.Contains("|DataDirectory|"))
-		{
-			//have to replace it
-			string dataFilePath=GetDataDirectory();
-			_connectionString=_connectionString.Replace("|DataDirectory|",dataFilePath);
-		}    
-	}
-}
-
-public string ConnectionString
-{
-    get 
-    {
-		InitConnectionString();
-        return _connectionString;
-    }
-}
-
-public string ProviderName
-{
-    get 
-    {
-		InitConnectionString();
-        return _providerName;
-    }
-}
-
-public EnvDTE.Project GetCurrentProject()  {
-
-    IServiceProvider _ServiceProvider = (IServiceProvider)Host;
-    if (_ServiceProvider == null)
-        throw new Exception("Host property returned unexpected value (null)");
-	
-    EnvDTE.DTE dte = (EnvDTE.DTE)_ServiceProvider.GetService(typeof(EnvDTE.DTE));
-    if (dte == null)
-        throw new Exception("Unable to retrieve EnvDTE.DTE");
-	
-    Array activeSolutionProjects = (Array)dte.ActiveSolutionProjects;
-    if (activeSolutionProjects == null)
-        throw new Exception("DTE.ActiveSolutionProjects returned null");
-	
-    EnvDTE.Project dteProject = (EnvDTE.Project)activeSolutionProjects.GetValue(0);
-    if (dteProject == null)
-        throw new Exception("DTE.ActiveSolutionProjects[0] returned null");
-	
-    return dteProject;
-
-}
-
-private string GetProjectPath()
-{
-    EnvDTE.Project project = GetCurrentProject();
-    System.IO.FileInfo info = new System.IO.FileInfo(project.FullName);
-    return info.Directory.FullName;
-}
-
-private string GetConfigPath()
-{
-    EnvDTE.Project project = GetCurrentProject();
-    foreach (EnvDTE.ProjectItem item in project.ProjectItems)
-    {
-        // if it is the app.config file, then open it up
-        if (item.Name.Equals("App.config",StringComparison.InvariantCultureIgnoreCase) || item.Name.Equals("Web.config",StringComparison.InvariantCultureIgnoreCase))
-			return GetProjectPath() + "\\" + item.Name;
-    }
-    return String.Empty;
-}
-
-public string GetDataDirectory()
-{
-    EnvDTE.Project project=GetCurrentProject();
-    return System.IO.Path.GetDirectoryName(project.FileName)+"\\App_Data\\";
-}
-
-static string zap_password(string connectionString)
-{
-	var rx = new Regex("password=.*;", RegexOptions.Singleline | RegexOptions.Multiline | RegexOptions.IgnoreCase);
-	return rx.Replace(connectionString, "password=**zapped**;");
-}
-
-
-
-Tables LoadTables()
-{
-	InitConnectionString();
-
-	WriteLine("// This file was automatically generated by the AsyncPoco T4 Template");
-	WriteLine("// Do not make changes directly to this file - edit the template instead");
-	WriteLine("// ");
-	WriteLine("// The following connection settings were used to generate this file");
-	WriteLine("// ");
-	WriteLine("//     Connection String Name: `{0}`", ConnectionStringName);
-	WriteLine("//     Provider:               `{0}`", ProviderName);
-	WriteLine("//     Connection String:      `{0}`", zap_password(ConnectionString));
-	WriteLine("//     Schema:                 `{0}`", SchemaName);
-	WriteLine("//     Include Views:          `{0}`", IncludeViews);
-	WriteLine("");
-
-	DbProviderFactory _factory;
-	try
-	{
-		_factory = DbProviderFactories.GetFactory(ProviderName);
-	}
-	catch (Exception x)
-	{
-		var error=x.Message.Replace("\r\n", "\n").Replace("\n", " ");
-		Warning(string.Format("Failed to load provider `{0}` - {1}", ProviderName, error));
-		WriteLine("");
-		WriteLine("// -----------------------------------------------------------------------------------------");
-		WriteLine("// Failed to load provider `{0}` - {1}", ProviderName, error);
-		WriteLine("// -----------------------------------------------------------------------------------------");
-		WriteLine("");
-		return new Tables();
-	}
-
-	try
-	{
-		Tables result;
-		using(var conn=_factory.CreateConnection())
-		{
-			conn.ConnectionString=ConnectionString;         
-			conn.Open();
-        
-			SchemaReader reader=null;
-        
-			if (_factory.GetType().Name == "MySqlClientFactory")
-			{
-				// MySql
-				reader=new MySqlSchemaReader();
-			}
-			else if (_factory.GetType().Name == "SqlCeProviderFactory")
-			{
-				// SQL CE
-				reader=new SqlServerCeSchemaReader();
-			}
-			else if (_factory.GetType().Name == "NpgsqlFactory")
-			{
-				// PostgreSQL
-				reader=new PostGreSqlSchemaReader();
-			}
-			else if (_factory.GetType().Name == "OracleClientFactory")
-			{
-				// Oracle
-				reader=new OracleSchemaReader();
-			}
-			else
-			{
-				// Assume SQL Server
-				reader=new SqlServerSchemaReader();
-			}
-
-			reader.outer=this;
-			result=reader.ReadSchema(conn, _factory);
-
-			// Remove unrequired tables/views
-			for (int i=result.Count-1; i>=0; i--)
-			{
-				if (SchemaName!=null && string.Compare(result[i].Schema, SchemaName, true)!=0)
-				{
-					result.RemoveAt(i);
-					continue;
-				}
-				if (!IncludeViews && result[i].IsView)
-				{
-					result.RemoveAt(i);
-					continue;
-				}
-			}
-
-			conn.Close();
-
-
-			var rxClean = new Regex("^(Equals|GetHashCode|GetType|ToString|repo|Save|IsNew|Insert|Update|Delete|Exists|SingleOrDefault|Single|First|FirstOrDefault|Fetch|Page|Query)$");
-			foreach (var t in result)
-			{
-				t.ClassName = ClassPrefix + t.ClassName + ClassSuffix;
-				foreach (var c in t.Columns)
-				{
-					c.PropertyName = rxClean.Replace(c.PropertyName, "_$1");
-
-					// Make sure property name doesn't clash with class name
-					if (c.PropertyName == t.ClassName)
-						c.PropertyName = "_" + c.PropertyName;
-				}
-			}
-
-		    return result;
-		}
-	}
-	catch (Exception x)
-	{
-		var error=x.Message.Replace("\r\n", "\n").Replace("\n", " ");
-		Warning(string.Format("Failed to read database schema - {0}", error));
-		WriteLine("");
-		WriteLine("// -----------------------------------------------------------------------------------------");
-		WriteLine("// Failed to read database schema - {0}", error);
-		WriteLine("// -----------------------------------------------------------------------------------------");
-		WriteLine("");
-		return new Tables();
-	}
-
-        
+public enum Dialect {
+    MySql,
+    SqlServerCe,
+    Postgres,
+    Oracle,
+    SqlServer
 }
 
 abstract class SchemaReader
 {
-	public abstract Tables ReadSchema(DbConnection connection, DbProviderFactory factory);
-	public GeneratedTextTransformation outer;
-	public void WriteLine(string o)
-	{
-		outer.WriteLine(o);
-	}
+    static Regex rxCleanUp = new Regex(@"[^\w\d_]", RegexOptions.Compiled);
 
+    static string[] cs_keywords = { "abstract", "event", "new", "struct", "as", "explicit", "null", 
+        "switch", "base", "extern", "object", "this", "bool", "false", "operator", "throw", 
+        "break", "finally", "out", "true", "byte", "fixed", "override", "try", "case", "float", 
+        "params", "typeof", "catch", "for", "private", "uint", "char", "foreach", "protected", 
+        "ulong", "checked", "goto", "public", "unchecked", "class", "if", "readonly", "unsafe", 
+        "const", "implicit", "ref", "ushort", "continue", "in", "return", "using", "decimal", 
+        "int", "sbyte", "virtual", "default", "interface", "sealed", "volatile", "delegate", 
+        "internal", "short", "void", "do", "is", "sizeof", "while", "double", "lock", 
+        "stackalloc", "else", "long", "static", "enum", "namespace", "string" };
+
+	public abstract Tables ReadSchema(DbConnection connection, DbProviderFactory factory);
+	
+    protected Func<string, string> CleanUp = (str) =>
+    {
+	    str = rxCleanUp.Replace(str, "_");
+
+	    if (char.IsDigit(str[0]) || cs_keywords.Contains(str))
+		    str = "@" + str;
+	    
+        return str;
+    };
+    
+    public static Tables LoadTables(GeneratorSettings settings)
+    {
+	    Tables result;
+	    using(var conn=settings.DbProvider.CreateConnection())
+	    {
+		    conn.ConnectionString = settings.ConnectionString;
+		    conn.Open();
+	    
+		    SchemaReader reader=null;
+		    
+		    switch(settings.SqlDialect) {
+			    case Dialect.MySql:
+				    reader=new MySqlSchemaReader();
+				    break;
+
+			    case Dialect.SqlServerCe:
+				    reader=new SqlServerCeSchemaReader();
+				    break;
+
+			    case Dialect.Postgres:
+				    reader=new PostGreSqlSchemaReader();
+				    break;
+
+			    case Dialect.Oracle:
+				    reader=new OracleSchemaReader();
+				    break;
+
+			    case Dialect.SqlServer:
+				    reader=new SqlServerSchemaReader();
+				    break;
+
+			    default: throw new Exception($"unsupported dialect {settings.SqlDialect}");
+		    }
+			    
+		    
+		    result=reader.ReadSchema(conn, settings.DbProvider);
+
+		    // Remove unrequired tables/views
+		    for (int i=result.Count-1; i>=0; i--)
+		    {
+			    if (settings.SchemaName!=null && string.Compare(result[i].Schema, settings.SchemaName, true)!=0)
+			    {
+				    result.RemoveAt(i);
+				    continue;
+			    }
+			    if (!settings.IncludeViews && result[i].IsView)
+			    {
+				    result.RemoveAt(i);
+				    continue;
+			    }
+		    }
+
+		    conn.Close();
+
+
+		    var rxClean = new Regex("^(Equals|GetHashCode|GetType|ToString|repo|Save|IsNew|Insert|Update|Delete|Exists|SingleOrDefault|Single|First|FirstOrDefault|Fetch|Page|Query)$");
+		    foreach (var t in result)
+		    {
+			    t.ClassName = settings.ClassPrefix + t.ClassName + settings.ClassSuffix;
+			    foreach (var c in t.Columns)
+			    {
+				    c.PropertyName = rxClean.Replace(c.PropertyName, "_$1");
+
+				    // Make sure property name doesn't clash with class name
+				    if (c.PropertyName == t.ClassName)
+					    c.PropertyName = "_" + c.PropertyName;
+			    }
+		    }
+
+		    return result;
+	    }	
+    }
 }
 
 class SqlServerSchemaReader : SchemaReader
@@ -646,8 +443,6 @@ class SqlServerSchemaReader : SchemaReader
 		}
 		return sysType;
 	}
-
-
 
 	const string TABLE_SQL=@"SELECT *
 		FROM  INFORMATION_SCHEMA.TABLES
@@ -832,8 +627,6 @@ class SqlServerCeSchemaReader : SchemaReader
 		}
 		return sysType;
 	}
-
-
 
 	const string TABLE_SQL=@"SELECT *
 		FROM  INFORMATION_SCHEMA.TABLES
@@ -1635,4 +1428,92 @@ public static class Inflector {
     #endregion
 }
 
-#>
+public class Generator {
+    private string GenerateTableHeader(Table tbl) {
+	    var result = new StringBuilder();
+	    result.AppendLine($"\t[TableName(\"{tbl.Name}\")]");
+
+	    if (tbl.PK != null) {
+		    result.Append($"\t[PrimaryKey(\"{tbl.PK.Name}\")");
+		    result.Append(
+			    tbl.PK!=null && tbl.PK.IsAutoIncrement && tbl.SequenceName!=null ?
+					    $", sequenceName=\"{tbl.SequenceName}\""
+				    :
+					    "");
+		    result.Append(
+			    tbl.PK!=null && !tbl.PK.IsAutoIncrement ?
+					    ", autoIncrement=false"
+				    :
+					    "");
+		    result.AppendLine("]");
+	    }
+	    
+	    return result.ToString();
+    }
+
+    private string GenerateTableFooter(Table tbl) {
+	    return "\n\t}\n";
+    }
+
+    public string GenerateTableColumns(Table tbl, GeneratorSettings settings) {
+	    return
+		    $@"	[ExplicitColumns]
+	    public partial class {tbl.ClassName} 
+	    {{
+    " +
+		    string.Join("\n", 
+			    tbl.Columns
+				    .Where(c => !c.Ignore)
+				    .Select(col => {
+					    var name = col.Name!=col.PropertyName ? $"(\"{col.Name}\")" : "";
+					    var common = $@"		[Column{name}] public {col.PropertyType}{(col.DomainIsNullable ? "?" : "")} {col.PropertyName}";
+
+					    if (!settings.TrackModifiedColumns) {
+						    return common + " { get; set; }";
+					    }
+					    
+					    return common + $@"
+		    {{ 
+			    get
+			    {{
+				    return _{col.PropertyName};
+			    }}
+			    set
+			    {{
+				    _{col.PropertyName} = value;
+				    MarkColumnModified(""{col.Name}"");
+			    }}
+		    }}
+		    {col.PropertyType}{(col.DomainIsNullable ? "?" : "")} _{col.PropertyName};
+    "; 
+				    }));
+    }
+
+    public void GenerateCode(GeneratorSettings settings) {
+	    File.WriteAllText(
+		    settings.CsFile, 
+		    $@"
+    // This file was automatically generated by the PocoSchemaCodeGeneration.ForAsyncPoco
+    // Do not make changes directly to this file - edit the template instead
+    // The following connection settings were used to generate this file
+
+    using System;
+    using System.Collections.Generic;
+    using System.Data.Common;
+    using System.Linq;
+    using System.Threading.Tasks;
+    using System.Web;
+    using AsyncPoco;
+
+    namespace {settings.Namespace}
+    {{
+    " +
+	    string.Join("\n", 
+            SchemaReader.LoadTables(settings)
+			    .OrderBy(x => x.Name)
+			    .Where(x => !x.Ignore)
+			    .Select(tbl => GenerateTableHeader(tbl) + GenerateTableColumns(tbl, settings) + GenerateTableFooter(tbl) )	) +
+	    @"}
+    ");
+    }
+}
