@@ -1434,7 +1434,7 @@ public class Generator {
 	    result.AppendLine($"\t[TableName(\"{tbl.Name}\")]");
 
 	    if (tbl.PK != null) {
-		    result.Append($"\t[PrimaryKey(\"{tbl.PK.Name}\")");
+		    result.Append($"\t[PrimaryKey(\"{tbl.PK.Name}\"");
 		    result.Append(
 			    tbl.PK!=null && tbl.PK.IsAutoIncrement && tbl.SequenceName!=null ?
 					    $", sequenceName=\"{tbl.SequenceName}\""
@@ -1445,7 +1445,7 @@ public class Generator {
 					    ", autoIncrement=false"
 				    :
 					    "");
-		    result.AppendLine("]");
+		    result.AppendLine(")]");
 	    }
 	    
 	    return result.ToString();
