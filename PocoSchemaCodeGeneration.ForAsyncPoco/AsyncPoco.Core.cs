@@ -724,7 +724,7 @@ class PostGreSqlSchemaReader : SchemaReader
 					col.PropertyName=CleanUp(col.Name);
 					col.PropertyType=GetPropertyType(rdr["udt_name"].ToString());
 					col.IsNullable=rdr["is_nullable"].ToString()=="YES";
-					col.IsAutoIncrement = rdr["column_default"].ToString().StartsWith("nextval(");
+					col.IsAutoIncrement = rdr["column_default"].ToString().StartsWith("nextval(") || rdr["is_identity"].ToString()=="YES";
 					result.Add(col);
 				}
 			}
@@ -816,7 +816,7 @@ class PostGreSqlSchemaReader : SchemaReader
 			";
 
 	const string COLUMN_SQL=@"
-			SELECT column_name, is_nullable, udt_name, column_default
+			SELECT column_name, is_nullable, udt_name, column_default, is_identity
 			FROM information_schema.columns 
 			WHERE table_name=@tableName;
 			";
