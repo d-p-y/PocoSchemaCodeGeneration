@@ -2,7 +2,7 @@
 
 ## Why?
 
-I like AsyncPoco approach to generate poco classes from sql connection. I was missing T4 support in dotnet core. This library in conjuction with [dotnet-script](https://github.com/filipw/dotnet-script) can be used to generate poco classes.
+I like AsyncPoco's approach to generate poco classes from supported database. I was missing T4 support in dotnet core. This library in conjuction with [dotnet-script](https://github.com/filipw/dotnet-script) can be used to generate poco classes easily.
 
 ## Example usage with dotnet-script and postgresql
 
@@ -11,7 +11,7 @@ I like AsyncPoco approach to generate poco classes from sql connection. I was mi
 
 #r "nuget: System.Runtime.CompilerServices.Unsafe, 4.5.1"
 #r "nuget: Npgsql, 4.0.3"
-#r "nuget: PocoSchemaCodeGeneration.ForAsyncPoco, 1.0.0"
+#r "nuget: PocoSchemaCodeGeneration.ForAsyncPoco, 1.1.0"
 
 GenerateCode(new GeneratorSettings {
     CsFile = "../path-to-outcome-cs-file.cs",
@@ -24,7 +24,28 @@ GenerateCode(new GeneratorSettings {
 Console.WriteLine("ok");
 ```
 
+## Example usage with dotnet-script and SQL Server
 
+```
+#! "netcoreapp2.1"
+
+//uses https://github.com/filipw/dotnet-script
+
+#r "nuget: System.Runtime.CompilerServices.Unsafe, 4.5.1"
+#r "nuget: System.Data.SqlClient, 4.6.1"
+#r "nuget: PocoSchemaCodeGeneration.ForAsyncPoco, 1.1.0"
+
+using PocoSchemaCodeGeneration.ForAsyncPoco;
+
+Generator.GenerateCode(new GeneratorSettings {
+    CsFile = "Database.cs",
+    ConnectionString = @"Data Source=localhost\SQLEXPRESS;Initial Catalog=dbname;Integrated security=true",
+    DbProvider = System.Data.SqlClient.SqlClientFactory.Instance,
+    SqlDialect = Dialect.SqlServer,
+    Namespace = "NameSpace.Here"});
+    
+Console.WriteLine("ok");
+```
 
 ## Original author
 Github doesn't permit users to do multiple forks of the same source repo into the same destination account.
