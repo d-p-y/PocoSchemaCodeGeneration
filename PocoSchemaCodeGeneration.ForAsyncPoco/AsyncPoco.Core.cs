@@ -1429,7 +1429,7 @@ public static class Inflector {
 }
 
 public class Generator {
-    private string GenerateTableHeader(Table tbl) {
+    private static string GenerateTableHeader(Table tbl) {
 	    var result = new StringBuilder();
 	    result.AppendLine($"\t[TableName(\"{tbl.Name}\")]");
 
@@ -1451,11 +1451,11 @@ public class Generator {
 	    return result.ToString();
     }
 
-    private string GenerateTableFooter(Table tbl) {
+    private static string GenerateTableFooter(Table tbl) {
 	    return "\n\t}\n";
     }
 
-    public string GenerateTableColumns(Table tbl, GeneratorSettings settings) {
+    public static string GenerateTableColumns(Table tbl, GeneratorSettings settings) {
 	    return
 		    $@"	[ExplicitColumns]
 	    public partial class {tbl.ClassName} 
@@ -1489,7 +1489,7 @@ public class Generator {
 				    }));
     }
 
-    public void GenerateCode(GeneratorSettings settings) {
+    public static void GenerateCode(GeneratorSettings settings) {
 	    File.WriteAllText(
 		    settings.CsFile, 
 		    $@"
