@@ -1,0 +1,2 @@
+cd PocoSchemaCodeGeneration.ForAsyncPoco
+dotnet pack PocoSchemaCodeGeneration.ForAsyncPoco.csproj -c Release
