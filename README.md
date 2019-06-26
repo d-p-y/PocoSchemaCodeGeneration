@@ -11,9 +11,11 @@ I like AsyncPoco's approach to generate poco classes from supported database. I 
 
 #r "nuget: System.Runtime.CompilerServices.Unsafe, 4.5.1"
 #r "nuget: Npgsql, 4.0.3"
-#r "nuget: PocoSchemaCodeGeneration.ForAsyncPoco, 1.1.0"
+#r "nuget: PocoSchemaCodeGeneration.ForAsyncPoco, 1.2.0"
 
-GenerateCode(new GeneratorSettings {
+using PocoSchemaCodeGeneration.ForAsyncPoco;
+
+Generator.GenerateCode(new GeneratorSettings {
     CsFile = "../path-to-outcome-cs-file.cs",
     ConnectionString = @"Host=localhost;Username=some-user;Password=some-passwd;Database=put-db-name-here",
     DbProvider = Npgsql.NpgsqlFactory.Instance,
@@ -33,7 +35,7 @@ Console.WriteLine("ok");
 
 #r "nuget: System.Runtime.CompilerServices.Unsafe, 4.5.1"
 #r "nuget: System.Data.SqlClient, 4.6.1"
-#r "nuget: PocoSchemaCodeGeneration.ForAsyncPoco, 1.1.0"
+#r "nuget: PocoSchemaCodeGeneration.ForAsyncPoco, 1.2.0"
 
 using PocoSchemaCodeGeneration.ForAsyncPoco;
 
